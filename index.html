@@ -86,6 +86,9 @@
         </div>
         <div class="flex items-center gap-2">
             <span class="text-xs text-gray-500 hidden sm:block">v2.0</span>
+            <button onclick="location.reload(true)" class="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center hover:bg-dark-800 transition" title="Hard Refresh">
+                <i class="fas fa-sync-alt text-gray-400 text-sm"></i>
+            </button>
             <a href="https://github.com" target="_blank" class="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center hover:bg-dark-800 transition">
                 <i class="fab fa-github text-gray-400"></i>
             </a>
@@ -229,6 +232,12 @@
                                 <option value="advanced">Advanced</option>
                             </select>
                         </div>
+                        <div class="flex items-end">
+                            <label class="flex items-center gap-2 cursor-pointer px-4 py-2.5 bg-dark-900 border border-gray-700 rounded-xl w-full hover:border-gray-600 transition">
+                                <input type="checkbox" id="enableImages" checked class="w-4 h-4 accent-green-500 rounded">
+                                <span class="text-sm text-gray-300">Generate Images</span>
+                            </label>
+                        </div>
                     </div>
 
                     <!-- Primary API -->
@@ -322,7 +331,10 @@
                 <div class="w-full bg-dark-700 rounded-full h-2 mb-2">
                     <div id="progressBar" class="progress-bar h-2 rounded-full transition-all duration-500" style="width: 10%"></div>
                 </div>
-                <p id="progressDetail" class="text-xs text-gray-500">Analyzing content...</p>
+                <div class="flex justify-between items-center">
+                    <p id="progressDetail" class="text-xs text-gray-500">Analyzing content...</p>
+                    <p id="genTimer" class="text-xs text-yellow-400 hidden">⏱ 0s</p>
+                </div>
             </div>
 
             <!-- Results -->
@@ -933,13 +945,17 @@ async function callAI(prompt, content) {
         return await callAIDirect(prompt, provider, apiKey);
     }
 
-    // Otherwise, use serverless function (server key)
+    // Otherwise, use serverless function (server key) with timeout
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
         const response = await fetch('/api/generate?t=' + Date.now(), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-            body: JSON.stringify({ prompt, provider })
+            body: JSON.stringify({ prompt, provider }),
+            signal: controller.signal
         });
+        clearTimeout(timeout);
 
         if (!response.ok) {
             const err = await response.json();
@@ -949,6 +965,9 @@ async function callAI(prompt, content) {
         const data = await response.json();
         return parseAIJson(data.text);
     } catch (e) {
+        if (e.name === 'AbortError') {
+            throw new Error('Request timed out. Try fewer cards or add your own API key.');
+        }
         if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
             throw new Error('Cannot reach server. Please add your own API key in Advanced Options.');
         }
@@ -985,7 +1004,10 @@ async function callAIDirect(prompt, provider, apiKey) {
         body = { model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 8000 };
     }
 
-    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
+    clearTimeout(timeout);
     if (!response.ok) {
         const err = await response.text();
         throw new Error(`API Error (${response.status}): ${err.substring(0, 200)}`);
@@ -1198,15 +1220,15 @@ async function extractPDFWithOCR(file) {
     const arrayBuffer = await file.arrayBuffer();
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const maxPages = Math.min(pdf.numPages, 10); // Limit OCR to 10 pages (slow)
+    const maxPages = Math.min(pdf.numPages, 5); // Limit OCR to 5 pages for speed
     let fullText = '';
 
     for (let i = 1; i <= maxPages; i++) {
-        updateProgress(25 + (i / maxPages) * 60, `OCR: Processing page ${i} of ${maxPages}...`);
+        updateProgress(25 + (i / maxPages) * 60, `OCR: Page ${i}/${maxPages}...`);
 
         // Render page to canvas
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
+        const viewport = page.getViewport({ scale: 1.0 }); // Lower scale = faster OCR
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -1286,6 +1308,19 @@ async function generateFlashcards() {
     document.getElementById('resultsContainer').classList.add('hidden');
     document.getElementById('previewCards').innerHTML = '';
 
+    // Start timer
+    const genStart = Date.now();
+    const timerEl = document.getElementById('genTimer');
+    timerEl.classList.remove('hidden');
+    timerEl.textContent = '⏱ 0s';
+    const timerInterval = setInterval(() => {
+        const elapsed = ((Date.now() - genStart) / 1000).toFixed(0);
+        timerEl.textContent = `⏱ ${elapsed}s elapsed`;
+    }, 1000);
+
+    const MAX_RETRIES = 3;
+    let lastError = null;
+
     try {
         // Read file if needed — check both inputContent and global uploadedFile
         let fileContent = '';
@@ -1310,8 +1345,26 @@ async function generateFlashcards() {
         const promptContent = content || (uploadedFile ? { type: 'file', content: fileContent.substring(0, 20000) } : { type: 'text', content: 'General knowledge flashcards' });
         const prompt = buildPrompt(promptContent, settings);
 
-        updateProgress(40, 'Calling AI API...');
-        const result = await callAI(prompt, content);
+        // AI call with auto-retry (3 attempts)
+        let result = null;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                updateProgress(40, attempt > 1 ? `Retry ${attempt}/${MAX_RETRIES}: Generating flashcards...` : 'Generating flashcards...');
+                const aiStart = Date.now();
+                result = await callAI(prompt, content);
+                console.log('AI responded in', ((Date.now() - aiStart) / 1000).toFixed(1) + 's');
+                break;
+            } catch (aiErr) {
+                lastError = aiErr;
+                console.warn(`Attempt ${attempt}/${MAX_RETRIES} failed:`, aiErr.message);
+                if (attempt < MAX_RETRIES) {
+                    updateProgress(40, `Attempt ${attempt} failed. Retrying in 2s...`);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+        }
+
+        if (!result) throw lastError || new Error('AI generation failed after 3 attempts.');
 
         updateProgress(70, 'Processing flashcards...');
         flashcards = result.cards || [];
@@ -1322,28 +1375,36 @@ async function generateFlashcards() {
         const { csv, deckName } = buildCSV(result);
         csvData = { csv, deckName: settings.deckName || deckName };
 
-        updateProgress(95, 'Generating images...');
-        // Optionally generate images for first few cards
-        for (let i = 0; i < Math.min(3, flashcards.length); i++) {
-            if (flashcards[i].image_prompt) {
-                const imgUrl = await generateImage(flashcards[i].image_prompt);
-                if (imgUrl) flashcards[i].image_url = imgUrl;
-            }
+        // Generate images in parallel (much faster)
+        const imagesEnabled = document.getElementById('enableImages').checked;
+        const cardsNeedingImages = flashcards.filter(c => c.image_prompt);
+        if (imagesEnabled && cardsNeedingImages.length) {
+            updateProgress(90, `Generating ${Math.min(3, cardsNeedingImages.length)} images...`);
+            const imgPromises = cardsNeedingImages.slice(0, 3).map(async (card) => {
+                const imgUrl = await generateImage(card.image_prompt);
+                if (imgUrl) card.image_url = imgUrl;
+            });
+            await Promise.all(imgPromises);
         }
 
-        updateProgress(100, 'Done!');
+        const totalSec = ((Date.now() - genStart) / 1000).toFixed(1);
+        updateProgress(100, `Done in ${totalSec}s!`);
         setTimeout(() => {
+            clearInterval(timerInterval);
+            timerEl.classList.add('hidden');
             document.getElementById('progressContainer').classList.add('hidden');
             const preview = document.getElementById('extractedPreview');
             if (preview) preview.remove();
             showResults();
             saveKeys();
             addHistory(settings.deckName, flashcards.length);
-            showToast(`Generated ${flashcards.length} flashcards!`);
+            showToast(`Generated ${flashcards.length} flashcards in ${totalSec}s!`);
         }, 500);
 
     } catch (error) {
         console.error('Generation error:', error);
+        clearInterval(timerInterval);
+        timerEl.classList.add('hidden');
         showToast(error.message || 'Generation failed. Using sample cards.', 'error');
 
         // Fallback to sample cards
@@ -1358,6 +1419,8 @@ async function generateFlashcards() {
         saveKeys();
         addHistory(settings.deckName + ' (sample)', flashcards.length);
     } finally {
+        clearInterval(timerInterval);
+        timerEl.classList.add('hidden');
         btn.disabled = false;
         btn.classList.remove('opacity-70');
         btnText.textContent = 'Create Flashcards';
