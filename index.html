@@ -639,14 +639,45 @@ RESPOND IN VALID JSON FORMAT ONLY (no markdown, no code blocks):
 IMPORTANT: Return ONLY the JSON, no extra text.`;
 }
 
-// Call AI API
+// Call AI API — uses serverless proxy when no user key
 async function callAI(prompt, content) {
     const provider = document.getElementById('apiProvider').value;
     const apiKey = document.getElementById('apiKey').value.trim();
+
+    // If user has their own key, call API directly
+    if (apiKey) {
+        return await callAIDirect(prompt, provider, apiKey);
+    }
+
+    // Otherwise, use serverless function (server key)
+    try {
+        const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, provider })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `Server error (${response.status})`);
+        }
+
+        const data = await response.json();
+        const jsonMatch = data.text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('Invalid AI response format. Please try again.');
+        return JSON.parse(jsonMatch[0]);
+    } catch (e) {
+        if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+            throw new Error('Cannot reach server. Please add your own API key in Advanced Options.');
+        }
+        throw e;
+    }
+}
+
+// Direct API call when user provides their own key
+async function callAIDirect(prompt, provider, apiKey) {
     const baseUrl = document.getElementById('baseUrl').value.trim();
     const model = document.getElementById('modelName').value.trim();
-
-    if (!apiKey) throw new Error('API key is required. Please enter your API key in Advanced Options.');
 
     let headers = { 'Content-Type': 'application/json' };
     let body = {};
@@ -657,43 +688,22 @@ async function callAI(prompt, content) {
         headers['Authorization'] = `Bearer ${apiKey}`;
         headers['HTTP-Referer'] = window.location.origin;
         headers['X-Title'] = 'Anki Flash - AI Flashcard Generator';
-        body = {
-            model: model || 'openrouter/free',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.7,
-            max_tokens: 8000
-        };
+        body = { model: model || 'openrouter/free', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 8000 };
     } else if (provider === 'anthropic') {
         url = `${baseUrl}/v1/messages`;
         headers['x-api-key'] = apiKey;
         headers['anthropic-version'] = '2023-06-01';
-        body = {
-            model: model || 'claude-3-haiku-20240307',
-            max_tokens: 8000,
-            messages: [{ role: 'user', content: prompt }]
-        };
+        body = { model: model || 'claude-3-haiku-20240307', max_tokens: 8000, messages: [{ role: 'user', content: prompt }] };
     } else if (provider === 'gemini') {
         url = `${baseUrl}/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
-        body = {
-            contents: [{ parts: [{ text: prompt }] }]
-        };
+        body = { contents: [{ parts: [{ text: prompt }] }] };
     } else {
         url = `${baseUrl}/chat/completions`;
         headers['Authorization'] = `Bearer ${apiKey}`;
-        body = {
-            model: model || 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.7,
-            max_tokens: 8000
-        };
+        body = { model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 8000 };
     }
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body)
-    });
-
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
     if (!response.ok) {
         const err = await response.text();
         throw new Error(`API Error (${response.status}): ${err.substring(0, 200)}`);
@@ -701,27 +711,44 @@ async function callAI(prompt, content) {
 
     const data = await response.json();
     let text = '';
+    if (provider === 'gemini') text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    else if (provider === 'anthropic') text = data.content?.[0]?.text || '';
+    else text = data.choices?.[0]?.message?.content || '';
 
-    if (provider === 'gemini') {
-        text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    } else if (provider === 'anthropic') {
-        text = data.content?.[0]?.text || '';
-    } else {
-        text = data.choices?.[0]?.message?.content || '';
-    }
-
-    // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Invalid AI response format. Please try again.');
     return JSON.parse(jsonMatch[0]);
 }
 
-// Generate image
+// Generate image — uses serverless proxy when no user key
 async function generateImage(prompt) {
     const provider = document.getElementById('imageProvider').value;
-    const apiKey = document.getElementById('imageApiKey').value.trim();
-    if (provider === 'none' || !apiKey || !prompt) return '';
+    if (provider === 'none' || !prompt) return '';
 
+    const apiKey = document.getElementById('imageApiKey').value.trim();
+
+    // If user has their own key, call directly
+    if (apiKey) {
+        return await generateImageDirect(provider, apiKey, prompt);
+    }
+
+    // Otherwise, use serverless function
+    try {
+        const response = await fetch('/api/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+        });
+        const data = await response.json();
+        return data.url || '';
+    } catch (e) {
+        console.warn('Server image generation failed:', e.message);
+        return '';
+    }
+}
+
+// Direct image generation when user provides key
+async function generateImageDirect(provider, apiKey, prompt) {
     try {
         if (provider === 'openai') {
             const res = await fetch('https://api.openai.com/v1/images/generations', {
