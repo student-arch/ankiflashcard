@@ -409,6 +409,9 @@
                         <button onclick="copyToClipboard()" class="flex-1 bg-dark-700 hover:bg-dark-700 py-3 rounded-xl text-gray-300 font-semibold text-sm transition flex items-center justify-center gap-2 border border-gray-600">
                             <i class="fas fa-copy"></i> Copy CSV
                         </button>
+                        <button onclick="clearFlashcards()" class="bg-red-900/50 hover:bg-red-800/50 py-3 px-4 rounded-xl text-red-400 font-semibold text-sm transition flex items-center justify-center gap-2 border border-red-800/50">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1077,6 +1080,14 @@ function downloadCSV() {
 function copyToClipboard() {
     if (!csvData) return;
     navigator.clipboard.writeText(csvData.csv).then(() => showToast('Copied to clipboard!'));
+}
+
+function clearFlashcards() {
+    flashcards = [];
+    csvData = null;
+    document.getElementById('previewCards').innerHTML = '';
+    document.getElementById('resultsContainer').classList.add('hidden');
+    showToast('Flashcards cleared', 'info');
 }
 
 // Extract text from various file types
