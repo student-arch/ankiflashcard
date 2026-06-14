@@ -68,6 +68,48 @@
         #previewCards::-webkit-scrollbar-track { background: #1a1a2e; border-radius: 3px; }
         #previewCards::-webkit-scrollbar-thumb { background: #333355; border-radius: 3px; }
         #previewCards::-webkit-scrollbar-thumb:hover { background: #22c55e; }
+
+        /* Cross-browser resets */
+        *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        input, select, textarea, button { font-family: inherit; -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+        select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+        input[type="checkbox"] { cursor: pointer; }
+        button { cursor: pointer; }
+        img { max-width: 100%; height: auto; }
+
+        /* Mobile responsive */
+        @media (max-width: 640px) {
+            header.py-4 { padding-top: 12px; padding-bottom: 12px; }
+            header .text-xl { font-size: 1rem; }
+            header .w-10 { width: 32px; height: 32px; }
+            main.max-w-6xl { padding-left: 12px; padding-right: 12px; padding-top: 16px; }
+            .tab-btn { padding: 8px 12px; font-size: 12px; }
+            .tab-btn i { display: none; }
+            .bg-dark-800.rounded-2xl { padding: 16px; border-radius: 16px; }
+            .text-lg { font-size: 1rem; }
+            #dropzone { padding: 24px 16px; }
+            #dropzone .text-4xl { font-size: 2rem; }
+            textarea.input-field { min-height: 100px; }
+            .flashcard { padding: 12px; }
+            .flashcard-front h4 { font-size: 0.875rem; }
+            #toast { left: 12px; right: 12px; bottom: 12px; max-width: none; }
+            #genTimer { font-size: 10px; }
+        }
+
+        /* Tablet */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .tab-btn { padding: 10px 16px; }
+        }
+
+        /* Firefox scrollbar */
+        * { scrollbar-width: thin; scrollbar-color: #333355 #1a1a2e; }
+
+        /* Smooth scrolling */
+        html { scroll-behavior: smooth; }
+
+        /* Focus visible for accessibility */
+        :focus-visible { outline: 2px solid #22c55e; outline-offset: 2px; }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #22c55e; outline-offset: 2px; }
     </style>
 </head>
 <body class="min-h-screen text-gray-200">
@@ -85,7 +127,7 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <span class="text-xs text-gray-500 hidden sm:block">v2.0</span>
+            <span class="text-xs text-gray-500 hidden sm:block">v1.0</span>
             <button onclick="location.reload(true)" class="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center hover:bg-dark-800 transition" title="Hard Refresh">
                 <i class="fas fa-sync-alt text-gray-400 text-sm"></i>
             </button>
@@ -113,9 +155,9 @@
         </button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Left Panel: Input -->
-        <div class="lg:col-span-2 space-y-4">
+    <div class="space-y-4">
+        <!-- Input Panels -->
+        <div class="space-y-4">
             <!-- File Upload Tab -->
             <div id="panel-file" class="tab-panel fade-in">
                 <div class="bg-dark-800 rounded-2xl p-6 border border-gray-800">
@@ -371,63 +413,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- Right Panel: Tips & Info -->
-        <div class="space-y-4">
-            <div class="bg-dark-800 rounded-2xl p-5 border border-gray-800">
-                <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-                    <i class="fas fa-rocket text-primary"></i> Quick Start
-                </h4>
-                <ul class="space-y-2 text-sm text-gray-400">
-                    <li class="flex items-start gap-2"><i class="fas fa-check text-green-500 mt-0.5 text-xs"></i> Choose a content source tab</li>
-                    <li class="flex items-start gap-2"><i class="fas fa-check text-green-500 mt-0.5 text-xs"></i> Add your OpenRouter API key</li>
-                    <li class="flex items-start gap-2"><i class="fas fa-check text-green-500 mt-0.5 text-xs"></i> Click "Create Flashcards"</li>
-                    <li class="flex items-start gap-2"><i class="fas fa-check text-green-500 mt-0.5 text-xs"></i> Download CSV & import to Anki</li>
-                </ul>
-            </div>
-
-            <div class="bg-dark-800 rounded-2xl p-5 border border-gray-800">
-                <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-                    <i class="fas fa-key text-yellow-400"></i> API Setup
-                </h4>
-                <div class="space-y-3 text-sm text-gray-400">
-                    <div class="p-3 bg-dark-900 rounded-lg">
-                        <p class="font-medium text-gray-300 mb-1">OpenRouter (Recommended)</p>
-                        <ol class="list-decimal list-inside text-xs space-y-1">
-                            <li>Visit <a href="https://openrouter.ai" target="_blank" class="text-primary hover:underline">openrouter.ai</a></li>
-                            <li>Create account & get API key</li>
-                            <li>Use free model: <code class="text-primary">openrouter/free</code></li>
-                        </ol>
-                    </div>
-                    <div class="p-3 bg-dark-900 rounded-lg">
-                        <p class="font-medium text-gray-300 mb-1">For Images (Optional)</p>
-                        <p class="text-xs">Select "No Image Generation" to skip images, or configure an image API provider.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-dark-800 rounded-2xl p-5 border border-gray-800">
-                <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-                    <i class="fas fa-lightbulb text-yellow-400"></i> Tips
-                </h4>
-                <ul class="space-y-2 text-sm text-gray-400 text-xs">
-                    <li><i class="fas fa-star text-yellow-500 mr-1 text-xs"></i> Use 500+ characters for best results</li>
-                    <li><i class="fas fa-star text-yellow-500 mr-1 text-xs"></i> Separate topics with commas</li>
-                    <li><i class="fas fa-star text-yellow-500 mr-1 text-xs"></i> Higher difficulty = more complex cards</li>
-                    <li><i class="fas fa-star text-yellow-500 mr-1 text-xs"></i> Mix of Q&A and MCQ cards</li>
-                </ul>
-            </div>
-
-            <div class="bg-dark-800 rounded-2xl p-5 border border-gray-800">
-                <h4 class="font-semibold text-white mb-3 flex items-center gap-2">
-                    <i class="fas fa-history text-blue-400"></i> History
-                </h4>
-                <div id="historyList" class="space-y-2 text-sm text-gray-400">
-                    <p class="text-xs text-gray-600">No flashcards generated yet</p>
-                </div>
-                <button onclick="clearHistory()" class="mt-3 text-xs text-red-400 hover:text-red-300"><i class="fas fa-trash mr-1"></i>Clear History</button>
-            </div>
-        </div>
     </div>
 </main>
 
@@ -660,7 +645,6 @@ function loadSavedKeys() {
     if (saved.modelName) document.getElementById('modelName').value = saved.modelName;
     if (saved.imageProvider) { document.getElementById('imageProvider').value = saved.imageProvider; updateImageFields(); }
     if (saved.imageModel) document.getElementById('imageModel').value = saved.imageModel;
-    loadHistory();
 }
 
 function saveKeys() {
@@ -692,27 +676,6 @@ function addHistory(deckName, count) {
     hist.unshift({ name: deckName, count, time: new Date().toLocaleString() });
     hist = hist.slice(0, 10);
     localStorage.setItem('ankiflash_history', JSON.stringify(hist));
-    loadHistory();
-}
-
-function loadHistory() {
-    const hist = JSON.parse(localStorage.getItem('ankiflash_history') || '[]');
-    const el = document.getElementById('historyList');
-    if (!hist.length) { el.innerHTML = '<p class="text-xs text-gray-600">No flashcards generated yet</p>'; return; }
-    el.innerHTML = hist.map(h => `
-        <div class="p-2 bg-dark-900 rounded-lg flex justify-between items-center">
-            <div class="truncate">
-                <p class="text-xs font-medium text-gray-300 truncate">${h.name}</p>
-                <p class="text-xs text-gray-500">${h.count} cards · ${h.time}</p>
-            </div>
-        </div>
-    `).join('');
-}
-
-function clearHistory() {
-    localStorage.removeItem('ankiflash_history');
-    loadHistory();
-    showToast('History cleared', 'info');
 }
 
 // Get content from active tab
