@@ -3,9 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Anki Flash - AI Flashcard Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
         tailwind.config = {
@@ -273,8 +277,8 @@
 
                     <!-- AI Instructions -->
                     <div class="border-t border-gray-700 pt-4 mt-4">
-                        <label class="block text-sm text-gray-400 mb-1"><i class="fas fa-terminal mr-1"></i> Custom AI Instructions</label>
-                        <textarea id="aiInstructions" rows="4" class="input-field w-full px-4 py-3 rounded-xl text-sm resize-y" placeholder="Additional instructions for AI...&#10;e.g., Focus on clinical applications, use mnemonics, include real-world examples..."></textarea>
+                        <label class="block text-sm text-gray-400 mb-1"><i class="fas fa-terminal mr-1"></i> Custom AI Instructions <span class="text-xs text-gray-600">(auto-filled per tab)</span></label>
+                        <textarea id="aiInstructions" rows="8" class="input-field w-full px-4 py-3 rounded-xl text-sm resize-y font-mono text-xs leading-relaxed">Create flashcards that test deep understanding, not just memorization. For each concept: ask WHY it works, HOW it connects to other concepts, and WHEN to apply it. Use real examples from the source material. For MCQ options, make wrong answers plausible but clearly incorrect to someone who truly understands. Include questions that require applying knowledge to new scenarios. Add memory aids, mnemonics, or visual associations in the notes field for every card.</textarea>
                     </div>
                 </div>
             </div>
@@ -585,6 +589,141 @@ function getInputContent() {
     }
 }
 
+// Default instructions per content type
+function getDefaultInstruction(type) {
+    const defaults = {
+        file: `Anki Flashcard Generation Protocol — Strict Source-Adherent Mode:
+
+COMPREHENSION DEPTH (apply to every card):
+- Level 1 (Definition): What is X? Define in own words.
+- Level 2 (Mechanism): How does X work? What are the steps/process?
+- Level 3 (Causation): Why does X happen? What triggers it? What are the consequences if it doesn't?
+- Level 4 (Comparison): How does X differ from Y? What are the advantages/limitations?
+- Level 5 (Application): When and where do you apply X? What happens in edge cases?
+- Level 6 (Synthesis): How does X connect to concept Z from another section?
+
+CARD CONSTRUCTION RULES:
+- Every Q&A card must reference a specific fact, number, name, or mechanism from the source
+- Every MCQ must have 4 options: 1 correct + 3 distractors based on common confusion points
+- Wrong MCQ answers must be PLAUSIBLE — not obviously wrong, but incorrect upon careful reading
+- Back field must include the direct evidence from the source (quote or paraphrase with context)
+- Notes field: provide a memory hook — mnemonic, visual metaphor, "imagine this scenario..." or "compare to real-world X"
+- Mix difficulty within the set: 30% recall, 40% comprehension, 30% application
+- If the source contains formulas, equations, or technical terms — test those specifically
+- Include at least one "exception to the rule" card if applicable
+- Include at least one "common mistake" card highlighting what people usually get wrong
+
+PROHIBITED:
+- Do NOT invent facts not in the source
+- Do NOT use vague answers like "it depends" or "various factors"
+- Do NOT make all MCQs the same difficulty
+- Do NOT skip technical details in favor of oversimplified answers`,
+
+        topics: `Anki Flashcard Generation Protocol — Multi-Topic Mastery Mode:
+
+FOR EACH TOPIC, generate cards across ALL cognitive levels:
+1. FOUNDATION: Core definitions, key terms, essential formulas
+2. MECHANISM: Step-by-step processes, cause-and-effect chains, "how it works"
+3. CONTEXT: Historical development, why it matters, real-world significance
+4. CONNECTIONS: How this topic relates to others, cross-topic synthesis
+5. APPLICATION: Problem-solving scenarios, case studies, practical use cases
+6. EDGE CASES: Exceptions, limitations, common misconceptions, "gotcha" questions
+
+CROSS-TOPIC INTEGRATION:
+- When topics are related, create comparison cards (X vs Y)
+- Create "bridge" cards that test understanding of how topics interconnect
+- Include questions that require knowledge from MULTIPLE topics to answer
+
+MCQ STRATEGY:
+- Option A: Correct answer
+- Option B: Common misconception (the "obvious but wrong" choice)
+- Option C: Partial truth (correct in some contexts but not this one)
+- Option D: Confusion with related concept from another topic
+
+NOTES FIELD REQUIREMENTS:
+- For abstract concepts: provide a concrete analogy ("X is like Y because...")
+- For processes: provide a mental checklist or flowchart description
+- For lists/categories: provide a mnemonic acronym
+- For formulas: explain what each variable represents and when to use it
+
+MULTI-TOPIC DECKS:
+- When combining topics, ensure proportional representation
+- Create "meta" cards that test understanding of relationships between topics
+- Include a synthesis card that requires integrating knowledge from all topics`,
+
+        text: `Anki Flashcard Generation Protocol — Active Recall Transformation Mode:
+
+TRANSFORM passive reading material into active retrieval exercises:
+
+READING COMPREHENSION LEVELS:
+1. LITERAL: What does the text directly state? (surface recall)
+2. INFERENTIAL: What can you conclude from the text? (reading between lines)
+3. CRITICAL: Evaluate the claims — what's the evidence? What's missing?
+4. APPLIED: How would you use this information in a new situation?
+5. CONNECTIVE: How does this relate to what you already know?
+
+CARD TYPES TO GENERATE:
+- DEFINITION cards: "What is [term]?" — answer must include context from the source
+- EXPLANATION cards: "Explain how [process] works" — step-by-step from the text
+- EXAMPLE cards: "Give an example of [concept]" — must come from the source material
+- COMPARISON cards: "How does X differ from Y?" — structured contrast
+- SCENARIO cards: "Given [situation], what would happen and why?"
+- EVIDENCE cards: "What evidence supports [claim]?" — cite specific details
+- MISTAKE cards: "What is a common error when [doing X] and how to avoid it?"
+- SIGNIFICANCE cards: "Why is [concept] important in [context]?"
+
+MCQ CONSTRUCTION:
+- Questions should test understanding, not just recognition
+- Wrong answers must be the type of mistakes a STUDENT would make (not random)
+- Include "All of the above" or "None of the above" sparingly — max 1 per 10 cards
+- Test nuance: "Which BEST describes..." rather than "Which describes..."
+
+NOTES STRATEGY:
+- Link to prior knowledge: "Remember this is similar to [concept] because..."
+- Create vivid mental images: "Picture [scenario] to remember [fact]"
+- Provide exam-style framing: "In an exam, they might ask this as..."
+- Highlight the "so what?" — why does this matter in practice?`,
+
+        youtube: `Anki Flashcard Generation Protocol — Video Content Mastery Mode:
+
+EXTRACT and STRUCTURE knowledge from video content:
+
+VIDEO COMPREHENSION FRAMEWORK:
+1. INTRODUCTION: What problem does this video address? What will you learn?
+2. KEY CONCEPTS: What are the 3-5 main ideas presented?
+3. EXPLANATIONS: How does the creator explain each concept?
+4. EXAMPLES: What demonstrations, case studies, or analogies are used?
+5. TAKEAWAYS: What are the actionable conclusions?
+6. CONTEXT: How does this connect to the broader subject?
+
+CARD GENERATION STRATEGY:
+- For each KEY CONCEPT: create a definition card + an application card
+- For each EXAMPLE: create a "what demonstrates X?" card
+- For each EXPLANATION: create a "why does X work this way?" card
+- For each TAKEAWAY: create a "when would you apply this?" card
+- Include at least one "common confusion" card per major section
+
+MCQ DESIGN FOR VIDEO CONTENT:
+- Test whether viewer understood the EXPLANATION, not just heard the words
+- Wrong answers should reflect common misinterpretations of the video
+- Include questions that require connecting different parts of the video
+- Some questions should test the "why" behind the creator's recommendations
+
+NOTES FIELD — VIDEO-SPECIFIC:
+- Reference the section/timestamp concept appears: "At ~X:XX, the creator explains..."
+- Note visual demonstrations: "Remember the visual of [demonstration]..."
+- Capture the creator's framing: "The creator emphasizes this because..."
+- Add practice prompt: "After watching, try to explain this to someone else using..."
+- Include "rewatch trigger": "If you forgot this, rewatch the section on [topic]"
+
+ENGAGEMENT CARDS:
+- "What question would you ask the creator about this?"
+- "What's one thing you'd add or challenge from this video?"
+- "How would you apply this in [specific real-world scenario]?"`
+    };
+    return defaults[type] || 'None';
+}
+
 // Build prompt
 function buildPrompt(content, settings) {
     let contentSection = '';
@@ -612,7 +751,7 @@ ${contentWarning}
 
 DIFFICULTY: ${settings.difficulty}
 DECK NAME: ${settings.deckName || 'Auto-generated from content'}
-CUSTOM INSTRUCTIONS: ${settings.aiInstructions || 'None'}
+CUSTOM INSTRUCTIONS: ${settings.aiInstructions || getDefaultInstruction(content.type)}
 
 RULES:
 1. Create exactly ${settings.numCards} flashcards
@@ -662,9 +801,9 @@ async function callAI(prompt, content) {
 
     // Otherwise, use serverless function (server key)
     try {
-        const response = await fetch('/api/generate', {
+        const response = await fetch('/api/generate?t=' + Date.now(), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
             body: JSON.stringify({ prompt, provider })
         });
 
@@ -741,9 +880,9 @@ async function generateImage(prompt) {
 
     // Otherwise, use serverless function
     try {
-        const response = await fetch('/api/generate-image', {
+        const response = await fetch('/api/generate-image?t=' + Date.now(), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
             body: JSON.stringify({ prompt })
         });
         const data = await response.json();
@@ -844,27 +983,116 @@ async function extractFileText(file) {
     return await file.text();
 }
 
-// Extract text from PDF using pdf.js
+// Extract text from PDF using pdf.js + OCR fallback
 async function extractPDFText(file) {
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = '';
-        const maxPages = Math.min(pdf.numPages, 30);
-
-        for (let i = 1; i <= maxPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += pageText + '\n\n';
+    // Load pdf.js dynamically if not loaded
+    if (typeof pdfjsLib === 'undefined') {
+        try {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('pdf.js CDN failed'));
+                document.head.appendChild(script);
+            });
+        } catch (e) {
+            console.warn('pdf.js load failed:', e);
         }
-
-        return fullText.trim();
-    } catch (e) {
-        console.error('PDF extraction error:', e);
-        throw new Error('Failed to read PDF. The file may be encrypted or image-based. Try pasting the text instead.');
     }
+
+    // Step 1: Try pdf.js text extraction
+    let pdfText = '';
+    if (typeof pdfjsLib !== 'undefined') {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, useSystemFonts: true }).promise;
+            const maxPages = Math.min(pdf.numPages, 50);
+
+            for (let i = 1; i <= maxPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                pdfText += pageText + '\n\n';
+            }
+            pdfText = pdfText.trim();
+        } catch (e) {
+            console.error('pdf.js extraction error:', e);
+        }
+    }
+
+    // If pdf.js got good text, return it
+    if (pdfText.length > 50) {
+        return pdfText;
+    }
+
+    // Step 2: Image-based PDF — use OCR
+    updateProgress(20, 'PDF has images — running OCR (this may take a moment)...');
+    try {
+        const ocrText = await extractPDFWithOCR(file);
+        if (ocrText.length > 10) {
+            return ocrText;
+        }
+    } catch (e) {
+        console.error('OCR failed:', e);
+    }
+
+    // Step 3: Last resort — raw text
+    try {
+        const rawText = await file.text();
+        if (rawText.length > 50) {
+            return rawText;
+        }
+    } catch (e) {}
+
+    throw new Error('Could not extract text. The PDF may be encrypted. Try a different file or paste the text directly.');
+}
+
+// OCR extraction using Tesseract.js
+async function extractPDFWithOCR(file) {
+    // Load Tesseract if not loaded
+    if (typeof Tesseract === 'undefined') {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Tesseract.js CDN failed'));
+            document.head.appendChild(script);
+        });
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const maxPages = Math.min(pdf.numPages, 10); // Limit OCR to 10 pages (slow)
+    let fullText = '';
+
+    for (let i = 1; i <= maxPages; i++) {
+        updateProgress(25 + (i / maxPages) * 60, `OCR: Processing page ${i} of ${maxPages}...`);
+
+        // Render page to canvas
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // OCR the canvas image
+        const { data } = await Tesseract.recognize(canvas, 'eng', {
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    updateProgress(25 + (i / maxPages) * 60 + (m.progress * 10 / maxPages), `OCR: Page ${i} — ${Math.round(m.progress * 100)}%`);
+                }
+            }
+        });
+
+        fullText += data.text + '\n\n';
+    }
+
+    return fullText.trim();
 }
 
 // Extract text from DOCX (basic XML parsing)
@@ -892,8 +1120,8 @@ async function extractDocxText(file) {
 
 // Generate flashcards
 async function generateFlashcards() {
-    const content = getInputContent();
-    if (!content && !document.getElementById('textInput').value.trim() && !document.getElementById('topicInput').value.trim() && !document.getElementById('youtubeUrl').value.trim() && !uploadedFile) {
+    const inputContent = getInputContent();
+    if (!inputContent && !document.getElementById('textInput').value.trim() && !document.getElementById('topicInput').value.trim() && !document.getElementById('youtubeUrl').value.trim() && !uploadedFile) {
         showToast('Please provide some content first!', 'error');
         return;
     }
@@ -922,21 +1150,31 @@ async function generateFlashcards() {
     btnText.textContent = 'Generating...';
     document.getElementById('progressContainer').classList.remove('hidden');
     document.getElementById('resultsContainer').classList.add('hidden');
+    document.getElementById('previewCards').innerHTML = '';
 
     try {
-        // Read file if needed
+        // Read file if needed — check both inputContent and global uploadedFile
         let fileContent = '';
-        if (content?.type === 'file' && content.file) {
+        let content = inputContent;
+        const fileToRead = content?.type === 'file' ? content.file : uploadedFile;
+        if (fileToRead) {
             updateProgress(15, 'Reading file...');
-            fileContent = await extractFileText(content.file);
-            content.content = fileContent.substring(0, 15000);
-            if (fileContent.length < 50) {
-                throw new Error('Could not extract enough text from the file. Try a different file or paste the text directly.');
+            fileContent = await extractFileText(fileToRead);
+            console.log('Extracted text length:', fileContent.length);
+            console.log('First 200 chars:', fileContent.substring(0, 200));
+            if (!content) content = { type: 'file' };
+            content.type = 'file';
+            content.content = fileContent.substring(0, 20000);
+            if (fileContent.length < 10) {
+                throw new Error('Could not extract text from this file. It may be image-based. Please paste the text directly.');
             }
+            // Show extracted content preview
+            showExtractedPreview(fileContent.substring(0, 500), fileContent.length);
         }
 
         updateProgress(25, 'Building AI prompt...');
-        const prompt = buildPrompt(content || { type: 'text', content: 'General knowledge flashcards' }, settings);
+        const promptContent = content || (uploadedFile ? { type: 'file', content: fileContent.substring(0, 20000) } : { type: 'text', content: 'General knowledge flashcards' });
+        const prompt = buildPrompt(promptContent, settings);
 
         updateProgress(40, 'Calling AI API...');
         const result = await callAI(prompt, content);
@@ -962,6 +1200,8 @@ async function generateFlashcards() {
         updateProgress(100, 'Done!');
         setTimeout(() => {
             document.getElementById('progressContainer').classList.add('hidden');
+            const preview = document.getElementById('extractedPreview');
+            if (preview) preview.remove();
             showResults();
             saveKeys();
             addHistory(settings.deckName, flashcards.length);
@@ -978,6 +1218,8 @@ async function generateFlashcards() {
         csvData = { csv, deckName: settings.deckName || deckName };
 
         document.getElementById('progressContainer').classList.add('hidden');
+        const preview = document.getElementById('extractedPreview');
+        if (preview) preview.remove();
         showResults();
         saveKeys();
         addHistory(settings.deckName + ' (sample)', flashcards.length);
@@ -991,6 +1233,27 @@ async function generateFlashcards() {
 function updateProgress(pct, text) {
     document.getElementById('progressBar').style.width = pct + '%';
     document.getElementById('progressDetail').textContent = text;
+}
+
+// Show extracted content preview
+function showExtractedPreview(text, totalLength) {
+    const existing = document.getElementById('extractedPreview');
+    if (existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.id = 'extractedPreview';
+    div.className = 'bg-dark-800 rounded-2xl p-4 border border-blue-800/50 mt-4 fade-in';
+    div.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-semibold text-blue-400"><i class="fas fa-file-alt mr-1"></i>Extracted Content Preview (${totalLength.toLocaleString()} chars)</h4>
+            <button onclick="this.parentElement.parentElement.remove()" class="text-gray-500 hover:text-gray-300 text-xs"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="bg-dark-900 rounded-lg p-3 text-xs text-gray-400 font-mono max-h-40 overflow-y-auto leading-relaxed">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>
+        <p class="text-xs text-gray-500 mt-2">First 500 characters shown. AI will receive up to 20,000 characters.</p>
+    `;
+
+    const progress = document.getElementById('progressContainer');
+    progress.parentNode.insertBefore(div, progress.nextSibling);
 }
 
 // Show results
