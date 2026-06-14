@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anki Flash - AI Flashcard Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
         tailwind.config = {
@@ -587,56 +588,66 @@ function getInputContent() {
 // Build prompt
 function buildPrompt(content, settings) {
     let contentSection = '';
+    let contentWarning = '';
     if (content.type === 'file') {
-        contentSection = '[File content will be provided as context]';
+        contentSection = `=== START OF UPLOADED FILE ===\n${content.content || '[No content extracted]'}\n=== END OF UPLOADED FILE ===`;
+        contentWarning = 'CRITICAL: Generate flashcards ONLY from the file content above. Every question and answer MUST be directly found in the text. Do NOT use outside knowledge. Do NOT hallucinate or invent facts. If the extracted text is partial, only generate cards from what is available.';
     } else if (content.type === 'topics') {
         contentSection = `Topics: ${content.content}`;
+        contentWarning = 'Generate flashcards about these specific topics.';
     } else if (content.type === 'text') {
-        contentSection = `Study Material:\n${content.content}`;
+        contentSection = `=== START OF STUDY MATERIAL ===\n${content.content}\n=== END OF STUDY MATERIAL ===`;
+        contentWarning = 'CRITICAL: Generate flashcards ONLY from the text above. Every question and answer MUST be directly found in the text. Do NOT use outside knowledge. Do NOT hallucinate or invent facts.';
     } else if (content.type === 'youtube') {
         contentSection = `YouTube Video URL: ${content.content}\nGenerate flashcards based on common knowledge about this video's topic.`;
+        contentWarning = '';
     }
 
-    return `You are an expert Anki flashcard creator. Generate exactly ${settings.numCards} high-quality flashcards.
+    return `You are an expert Anki flashcard creator. Generate exactly ${settings.numCards} flashcards.
 
-CONTENT SOURCE (${content.type}):
+SOURCE MATERIAL (${content.type}):
 ${contentSection}
 
-DIFFICULTY: ${settings.difficulty}
-DECK NAME SUGGESTION: ${settings.deckName || 'Auto-generated from content'}
+${contentWarning}
 
+DIFFICULTY: ${settings.difficulty}
+DECK NAME: ${settings.deckName || 'Auto-generated from content'}
 CUSTOM INSTRUCTIONS: ${settings.aiInstructions || 'None'}
 
-REQUIREMENTS:
+RULES:
 1. Create exactly ${settings.numCards} flashcards
-2. Mix of Regular Q&A cards (60%) and Multiple Choice Questions (40%)
-3. Each card must be educational and test real understanding
-4. Use active recall principles
-5. Include mnemonics where helpful
+2. Mix: 60% Q&A cards, 40% Multiple Choice Questions
+3. EVERY fact in every card MUST come directly from the source material above
+4. Do NOT add information that is not in the source material
+5. Use active recall — test understanding, not just recognition
+6. EVERY card MUST have a "notes" field with a memory tip (never empty)
+7. MCQ format: <p>Question?</p><p>A) ...<br>B) ...<br>C) ...<br>D) ...</p>
+8. Back field uses HTML: <h3>Answer</h3><p>Explanation</p>
+9. If source material is short, generate fewer detailed cards rather than padding with filler
 
-RESPOND IN VALID JSON FORMAT ONLY (no markdown, no code blocks):
+RESPOND IN VALID JSON ONLY (no markdown, no code fences):
 {
-  "deck_name": "suggested_deck_name",
-  "tags": ["tag1", "tag2", "tag3"],
+  "deck_name": "suggested_name",
+  "tags": ["tag1", "tag2"],
   "cards": [
     {
       "type": "qa",
-      "front": "Question text here",
-      "back": "<div class='card'><h3>Answer</h3><p>Detailed explanation with <strong>key terms</strong> bolded.</p></div>",
-      "image_prompt": "Brief description for image generation or empty string",
-      "notes": "Extra study note or mnemonic"
+      "front": "Question from source material",
+      "back": "<h3>Answer</h3><p>Answer found in the source</p>",
+      "image_prompt": "description or empty string",
+      "notes": "memory tip"
     },
     {
       "type": "mcq",
-      "front": "<p>Question text?</p><p>A) Option 1<br>B) Option 2<br>C) Option 3<br>D) Option 4</p>",
-      "back": "<div class='card'><h3>Correct: B) Option 2</h3><p>Explanation of why B is correct and why others are wrong.</p></div>",
+      "front": "<p>Question?</p><p>A) ...<br>B) ...<br>C) ...<br>D) ...</p>",
+      "back": "<h3>Correct: B) ...</h3><p>Why B is correct based on source</p>",
       "image_prompt": "",
-      "notes": "Memory tip"
+      "notes": "memory tip"
     }
   ]
 }
 
-IMPORTANT: Return ONLY the JSON, no extra text.`;
+ONLY return the JSON object. No extra text.`;
 }
 
 // Call AI API — uses serverless proxy when no user key
@@ -663,9 +674,7 @@ async function callAI(prompt, content) {
         }
 
         const data = await response.json();
-        const jsonMatch = data.text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Invalid AI response format. Please try again.');
-        return JSON.parse(jsonMatch[0]);
+        return parseAIJson(data.text);
     } catch (e) {
         if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
             throw new Error('Cannot reach server. Please add your own API key in Advanced Options.');
@@ -715,9 +724,7 @@ async function callAIDirect(prompt, provider, apiKey) {
     else if (provider === 'anthropic') text = data.content?.[0]?.text || '';
     else text = data.choices?.[0]?.message?.content || '';
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Invalid AI response format. Please try again.');
-    return JSON.parse(jsonMatch[0]);
+    return parseAIJson(text);
 }
 
 // Generate image — uses serverless proxy when no user key
@@ -814,6 +821,75 @@ function copyToClipboard() {
     navigator.clipboard.writeText(csvData.csv).then(() => showToast('Copied to clipboard!'));
 }
 
+// Extract text from various file types
+async function extractFileText(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    // PDF — use pdf.js
+    if (ext === 'pdf') {
+        return await extractPDFText(file);
+    }
+
+    // TXT, MD — plain text
+    if (ext === 'txt' || ext === 'md' || ext === 'text') {
+        return await file.text();
+    }
+
+    // DOCX — basic extraction (XML content)
+    if (ext === 'docx') {
+        return await extractDocxText(file);
+    }
+
+    // Fallback — try as text
+    return await file.text();
+}
+
+// Extract text from PDF using pdf.js
+async function extractPDFText(file) {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        const maxPages = Math.min(pdf.numPages, 30);
+
+        for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n\n';
+        }
+
+        return fullText.trim();
+    } catch (e) {
+        console.error('PDF extraction error:', e);
+        throw new Error('Failed to read PDF. The file may be encrypted or image-based. Try pasting the text instead.');
+    }
+}
+
+// Extract text from DOCX (basic XML parsing)
+async function extractDocxText(file) {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = new Blob([arrayBuffer]);
+        const url = URL.createObjectURL(blob);
+        const response = await fetch(url);
+        const text = await response.text();
+        URL.revokeObjectURL(url);
+
+        // Extract text from XML
+        const doc = new DOMParser().parseFromString(text, 'application/xml');
+        const paragraphs = doc.getElementsByTagName('w:t');
+        let result = '';
+        for (let i = 0; i < paragraphs.length; i++) {
+            result += paragraphs[i].textContent + ' ';
+        }
+        return result.trim() || 'Could not extract text from DOCX file.';
+    } catch (e) {
+        throw new Error('Failed to read DOCX. Try pasting the text instead.');
+    }
+}
+
 // Generate flashcards
 async function generateFlashcards() {
     const content = getInputContent();
@@ -852,8 +928,11 @@ async function generateFlashcards() {
         let fileContent = '';
         if (content?.type === 'file' && content.file) {
             updateProgress(15, 'Reading file...');
-            fileContent = await content.file.text();
-            content.content = fileContent.substring(0, 10000);
+            fileContent = await extractFileText(content.file);
+            content.content = fileContent.substring(0, 15000);
+            if (fileContent.length < 50) {
+                throw new Error('Could not extract enough text from the file. Try a different file or paste the text directly.');
+            }
         }
 
         updateProgress(25, 'Building AI prompt...');
@@ -924,7 +1003,8 @@ function showResults() {
     preview.innerHTML = flashcards.map((card, i) => {
         const backContent = card.back || '';
         const imgHtml = card.image_url ? `<img src="${card.image_url}" alt="Visual aid" loading="lazy">` : '';
-        const notesHtml = card.notes ? `<p class="text-xs text-gray-500 mt-2 italic"><i class="fas fa-sticky-note mr-1"></i>${card.notes}</p>` : '';
+        const noteText = card.notes || (card.type === 'mcq' ? 'Focus on understanding why each option is correct or incorrect' : 'Try to recall the answer before revealing');
+        const notesHtml = `<p class="text-xs text-gray-500 mt-2 italic"><i class="fas fa-sticky-note mr-1"></i>${noteText}</p>`;
         return `
         <div class="flashcard p-4 bg-dark-900 rounded-xl border border-gray-700" onclick="toggleCard(this)" data-index="${i}">
             <div class="flashcard-front">
@@ -960,6 +1040,43 @@ function stripHTML(html) {
     const div = document.createElement('div');
     div.innerHTML = html;
     return div.textContent || div.innerText || '';
+}
+
+// Robust JSON parser — handles markdown code blocks, extra text, etc.
+function parseAIJson(text) {
+    // Strip markdown code blocks
+    let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // Try direct parse first
+    try {
+        const result = JSON.parse(cleaned);
+        if (result.cards) return result;
+    } catch (e) {}
+
+    // Find the JSON object containing "cards"
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+        try {
+            const result = JSON.parse(cleaned.substring(start, end + 1));
+            if (result.cards) return result;
+        } catch (e) {}
+    }
+
+    // Last resort: find "cards" array
+    const cardsIdx = cleaned.indexOf('"cards"');
+    if (cardsIdx !== -1) {
+        const jsonStart = cleaned.lastIndexOf('{', cardsIdx);
+        const jsonEnd = cleaned.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd > jsonStart) {
+            try {
+                const result = JSON.parse(cleaned.substring(jsonStart, jsonEnd + 1));
+                if (result.cards) return result;
+            } catch (e) {}
+        }
+    }
+
+    throw new Error('Invalid AI response format. Please try again.');
 }
 
 // Sample cards fallback
