@@ -258,7 +258,16 @@
                             </div>
                             <div id="modelGroup">
                                 <label class="block text-sm text-gray-400 mb-1">Model</label>
-                                <input type="text" id="modelName" class="input-field w-full px-4 py-2.5 rounded-xl text-sm" placeholder="openrouter/free">
+                                <div class="flex gap-2">
+                                    <div class="flex-1 relative">
+                                        <select id="modelNameSelect" class="input-field w-full px-4 py-2.5 rounded-xl text-sm hidden"></select>
+                                        <input type="text" id="modelName" class="input-field w-full px-4 py-2.5 rounded-xl text-sm" placeholder="openrouter/free">
+                                    </div>
+                                    <button onclick="fetchModels()" id="fetchModelsBtn" class="px-3 py-2 bg-dark-700 hover:bg-dark-800 border border-gray-600 rounded-xl text-xs text-gray-300 whitespace-nowrap transition" title="Fetch available models">
+                                        <i class="fas fa-sync-alt mr-1"></i>Models
+                                    </button>
+                                </div>
+                                <p id="modelStatus" class="text-xs text-gray-600 mt-1 hidden"></p>
                             </div>
                         </div>
                     </div>
@@ -512,6 +521,116 @@ function updateImageFields() {
     };
     if (defaults[provider]) modelInput.value = defaults[provider];
 }
+
+// Fetch available models from provider API
+async function fetchModels() {
+    const provider = document.getElementById('apiProvider').value;
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const btn = document.getElementById('fetchModelsBtn');
+    const status = document.getElementById('modelStatus');
+    const select = document.getElementById('modelNameSelect');
+    const input = document.getElementById('modelName');
+
+    if (!apiKey) {
+        status.textContent = 'Enter an API key first';
+        status.className = 'text-xs text-red-400 mt-1';
+        status.classList.remove('hidden');
+        setTimeout(() => status.classList.add('hidden'), 3000);
+        return;
+    }
+
+    btn.innerHTML = '<i class="fas fa-spinner loading-spin"></i>';
+    btn.disabled = true;
+    status.textContent = 'Fetching models...';
+    status.className = 'text-xs text-yellow-400 mt-1';
+    status.classList.remove('hidden');
+
+    let models = [];
+
+    try {
+        if (provider === 'openrouter') {
+            const res = await fetch('https://openrouter.ai/api/v1/models', {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            });
+            const data = await res.json();
+            models = (data.data || []).map(m => ({ id: m.id, name: m.name || m.id }));
+        } else if (provider === 'openai') {
+            const res = await fetch('https://api.openai.com/v1/models', {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            });
+            const data = await res.json();
+            models = (data.data || []).filter(m => m.id.includes('gpt')).map(m => ({ id: m.id, name: m.id }));
+        } else if (provider === 'grok') {
+            const res = await fetch('https://api.x.ai/v1/models', {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            });
+            const data = await res.json();
+            models = (data.data || []).map(m => ({ id: m.id, name: m.id }));
+        } else if (provider === 'gemini') {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            const data = await res.json();
+            models = (data.models || []).filter(m => m.supportedGenerationMethods?.includes('generateContent')).map(m => ({ id: m.name.replace('models/', ''), name: m.displayName || m.name }));
+        } else {
+            throw new Error('Model list not available for this provider');
+        }
+    } catch (e) {
+        status.textContent = e.message || 'Failed to fetch models';
+        status.className = 'text-xs text-red-400 mt-1';
+        btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Models';
+        btn.disabled = false;
+        setTimeout(() => status.classList.add('hidden'), 4000);
+        return;
+    }
+
+    if (!models.length) {
+        status.textContent = 'No models found';
+        status.className = 'text-xs text-red-400 mt-1';
+        btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Models';
+        btn.disabled = false;
+        setTimeout(() => status.classList.add('hidden'), 3000);
+        return;
+    }
+
+    // Sort models alphabetically
+    models.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Populate select
+    select.innerHTML = models.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+    // Try to select current model
+    const currentModel = input.value;
+    if (currentModel && models.find(m => m.id === currentModel)) {
+        select.value = currentModel;
+    }
+
+    // Switch to select
+    input.classList.add('hidden');
+    select.classList.remove('hidden');
+
+    status.textContent = `${models.length} models loaded`;
+    status.className = 'text-xs text-green-400 mt-1';
+    btn.innerHTML = '<i class="fas fa-edit mr-1"></i>Manual';
+    btn.disabled = false;
+    setTimeout(() => status.classList.add('hidden'), 3000);
+}
+
+// Toggle between select and manual input
+document.getElementById('fetchModelsBtn')?.addEventListener('click', function() {
+    const select = document.getElementById('modelNameSelect');
+    const input = document.getElementById('modelName');
+    if (!select.classList.contains('hidden') && this.innerHTML.includes('Manual')) {
+        // Switch to manual input
+        input.value = select.value;
+        select.classList.add('hidden');
+        input.classList.remove('hidden');
+        this.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Models';
+    }
+});
+
+// Sync select value back to input on change
+document.getElementById('modelNameSelect')?.addEventListener('change', function() {
+    document.getElementById('modelName').value = this.value;
+});
 
 // Key visibility toggle
 function toggleKeyVis(id) {
