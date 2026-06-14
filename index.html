@@ -173,8 +173,23 @@
                     <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
                         <i class="fab fa-youtube text-red-500"></i> YouTube Video
                     </h3>
+                    <div class="bg-yellow-900/20 border border-yellow-700/50 rounded-xl p-4 mb-4">
+                        <div class="flex items-start gap-3">
+                            <i class="fas fa-exclamation-triangle text-yellow-400 mt-0.5"></i>
+                            <div>
+                                <p class="text-sm text-yellow-200 font-medium">Lower Accuracy Warning</p>
+                                <p class="text-xs text-yellow-300/70 mt-1">YouTube flashcards are generated from video titles/descriptions only — not full transcripts. Results may be less accurate compared to File, Text, or Topics methods.</p>
+                                <p class="text-xs text-yellow-300/70 mt-2"><strong class="text-yellow-200">For better results:</strong></p>
+                                <ul class="text-xs text-yellow-300/70 mt-1 space-y-1 list-disc list-inside">
+                                    <li>Add your own API key in Advanced Options for higher quality models</li>
+                                    <li>Use the <span class="text-primary font-medium">Text tab</span> — copy the video transcript and paste it</li>
+                                    <li>Use the <span class="text-primary font-medium">File tab</span> — download subtitles as .txt and upload</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                     <input type="url" id="youtubeUrl" class="input-field w-full px-4 py-3 rounded-xl text-sm mb-3" placeholder="https://www.youtube.com/watch?v=...">
-                    <p class="text-xs text-gray-500">Paste a YouTube video URL. The AI will generate flashcards from the video transcript.</p>
+                    <p class="text-xs text-gray-500">Paste a YouTube video URL. The AI will generate flashcards based on available video information.</p>
                 </div>
             </div>
 
